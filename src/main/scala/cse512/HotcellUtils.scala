@@ -42,9 +42,12 @@ object HotcellUtils {
     return calendar.get(Calendar.DAY_OF_MONTH)
   }
 
-  def calculateNeighbours(X: Float, Y: Float, Z: Float, minX: Float, minY: Float, minZ: Float, maxX: Float, maxY: Float, maxZ: Float): Int = {
+  def square(X: Int): Double ={
+    return (X*X).toDouble
+  }
+
+  def calculateNeighbours(X: Float, Y: Float, Z: Float, minX: Float, minY: Float, minZ: Float, maxX: Float, maxY: Float, maxZ: Float): Double = {
     var count = 0
-    var neighbours = Array(17, 11, 7)
 
     if (X == minX || X == maxX) {
       count = count + 1
@@ -56,12 +59,22 @@ object HotcellUtils {
       count = count + 1
     }
 
-    if (count > 0) {
-      return neighbours(count)
-    }
-    else{
+    if (count == 1) {
+      return 17
+    } else if(count == 2){
+      return 11
+    } else if(count == 3){
+      return 7
+    } else{
       return 26
     }
+
+  }
+
+  def calculateZscore(mean: Double, std: Double, sumn: Double, neighbours: Double, numCells: Double): Double ={
+    var numerator = (sumn) - (mean*neighbours)
+    var denomenator = std*scala.math.sqrt( ((numCells*neighbours) - (neighbours*neighbours))/(numCells-1) )
+    return numerator/denomenator
 
   }
 

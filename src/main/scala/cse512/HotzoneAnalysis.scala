@@ -39,7 +39,9 @@ object HotzoneAnalysis {
 
     // YOU NEED TO CHANGE THIS PART
     println("Performing GroupBy on JoinDf and Sorting......")
-    joinDf.groupBy("rectangle").count().sort("rectangle")
+    val finalDf = spark.sql("select rectangle, count(point) as npoints from joinResult group by rectangle order by rectangle").persist()
+    finalDf.createOrReplaceTempView("finalDF")
+    return finalDf
   }
 
 }

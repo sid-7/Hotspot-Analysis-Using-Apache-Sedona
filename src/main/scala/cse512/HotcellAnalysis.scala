@@ -1,5 +1,6 @@
 package cse512
 
+import com.vividsolutions.jts.awt.PointShapeFactory.X
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.udf
@@ -20,15 +21,16 @@ object HotcellAnalysis {
     pickupInfo.show()
 
     // Assign cell coordinates based on pickup points
-    spark.udf.register("CalculateX",(pickupPoint: String)=>((
+    spark.udf.register("CalculateX",(pickupPoint: String)=>(
       HotcellUtils.CalculateCoordinate(pickupPoint, 0)
-      )))
-    spark.udf.register("CalculateY",(pickupPoint: String)=>((
+      ))
+    spark.udf.register("CalculateY",(pickupPoint: String)=>(
       HotcellUtils.CalculateCoordinate(pickupPoint, 1)
-      )))
-    spark.udf.register("CalculateZ",(pickupTime: String)=>((
+      ))
+    spark.udf.register("CalculateZ",(pickupTime: String)=>(
       HotcellUtils.CalculateCoordinate(pickupTime, 2)
-      )))
+      ))
+
     pickupInfo = spark.sql("select CalculateX(nyctaxitrips._c5),CalculateY(nyctaxitrips._c5), CalculateZ(nyctaxitrips._c1) from nyctaxitrips")
     var newCoordinateName = Seq("x", "y", "z")
     pickupInfo = pickupInfo.toDF(newCoordinateName:_*)
@@ -45,16 +47,42 @@ object HotcellAnalysis {
     val maxZ = 31
     val numCells = (maxX - minX + 1)*(maxY - minY + 1)*(maxZ - minZ + 1)
 
-    pickupInfo = spark.sql("select x,y,z,count(*) as hotcells from pickupInfoView group by x, y, z")
+    pickupInfo = spark.sql("select x,y,z,count(*) as hotcells from pickupInfoView group by x, y, z order by z,y,x")
     pickupInfo.createOrReplaceTempView("relevantCells")
     pickupInfo.show()
 
-//    val allPickuprows = spark.sql("select count(*) as count from pickupInfoView")
-//    val relevantRows = spark.sql("select count(*) as count from relevantCells")
-//
-//    allPickuprows.show()
-//    relevantRows.show()
+    println("Calculating Mean......")
+    val hotcellSum = spark.sql("select sum(hotcells) from relevantCells").first().getLong(0).toDouble
+    spark.udf.register("square", (X: Int) => (HotcellUtils.square(X)))
+    val squareOfHotcells = spark.sql("select sum(square(hotcells)) as sumOfSquare from relevantCells").first().getDouble(0)
 
-    return pickupInfo // YOU NEED TO CHANGE THIS PART
+    val hotcellMean =  hotcellSum/numCells
+    println(hotcellMean)
+
+    println("Calculating STD.......")
+    var hotcellStd = scala.math.sqrt((squareOfHotcells/numCells) - (hotcellMean*hotcellMean))
+    println(hotcellStd)
+
+
+    spark.udf.register("calculateNeighbours", (X: Float, Y: Float, Z:Float, minX: Float, minY: Float, minZ: Float, maxX: Float, maxY: Float, maxZ: Float)=>((
+      HotcellUtils.calculateNeighbours(X, Y, Z, minX, minY, minZ, maxX, maxY, maxZ)
+    )))
+
+    println("Calculating Neighbours..........")
+    val Neighbours = spark.sql("select calculateNeighbours(a1.x,a1.y,a1.z,"+minX + "," + minY + "," + minZ + "," + maxX + "," + maxY + "," + maxZ + ") as ncount,count(*) as countall, a1.x as x,a1.y as y,a1.z as z, sum(a2.hotcells) as sumtotal from relevantCells as a1, relevantCells as a2 where (a2.x = a1.x+1 or a2.x = a1.x or a2.x = a1.x-1) and (a2.y = a1.y+1 or a2.y = a1.y or a2.y =a1.y-1) and (a2.z = a1.z+1 or a2.z = a1.z or a2.z =a1.z-1) group by a1.z,a1.y,a1.x order by a1.z,a1.y,a1.x")
+    Neighbours.createOrReplaceTempView("Neighbours")
+    Neighbours.show()
+
+
+    spark.udf.register("zscore", (hotcellMean: Double, hotcellStd: Double, sumn: Double, countn: Double, numCells: Double)=> (
+      HotcellUtils.calculateZscore(hotcellMean, hotcellStd, sumn, countn, numCells)
+    ))
+
+
+    var finalDf = spark.sql("select x,y,z, zscore("+ hotcellMean+","+hotcellStd+ ",sumtotal,ncount,"+ numCells +") as zs from Neighbours order by zs desc limit 50")
+    finalDf.createOrReplaceTempView("FinalDf")
+    finalDf.show()
+
+    return spark.sql("select x,y,z from FinalDf")
   }
 }
