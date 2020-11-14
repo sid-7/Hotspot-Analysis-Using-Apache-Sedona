@@ -27,7 +27,6 @@ object Entrance extends App {
   }
 
   private def paramsParser(spark: SparkSession, args: Array[String]): Unit = {
-    println("This is paramsParser")
     var paramOffset = 1
     var currentQueryParams = ""
     var currentQueryName = ""
@@ -54,7 +53,6 @@ object Entrance extends App {
   }
 
   private def queryLoader(spark: SparkSession, queryName: String, queryParams: String, outputPath: String) {
-    println("this is queryLoader")
     val queryParam = queryParams.split(" ")
     if (queryName.equalsIgnoreCase("hotcellanalysis")) {
       if (queryParam.length != 1) throw new ArrayIndexOutOfBoundsException("[CSE512] Query " + queryName + " needs 1 parameters but you entered " + queryParam.length)
